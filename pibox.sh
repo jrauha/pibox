@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="${PIBOX_IMAGE:-pi-sandbox}"
+IMAGE="${PIBOX_IMAGE:-jirauha/pibox}"
 WORKSPACE="${PIBOX_WORKSPACE:-$PWD}"
 WORKDIR="${PIBOX_WORKDIR:-/workspace}"
 HOME_VOLUME="${PIBOX_HOME_VOLUME:-pi-agent-home}"

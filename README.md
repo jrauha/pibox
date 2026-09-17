@@ -11,7 +11,15 @@ Included tools:
 - Git, GitHub CLI, ripgrep, fd
 - PostgreSQL client tools and common build tools
 
-## Build
+## Image
+
+The default image is published at [`jirauha/pibox`](https://hub.docker.com/r/jirauha/pibox).
+
+```bash
+docker pull jirauha/pibox
+```
+
+## Build locally
 
 ```bash
 make build
@@ -49,7 +57,7 @@ PIBOX_READ_ONLY=1 pibox
 
 Useful variables:
 
-- `PIBOX_IMAGE` - Docker image, default `pi-sandbox`
+- `PIBOX_IMAGE` - Docker image, default `jirauha/pibox`
 - `PIBOX_WORKSPACE` - host directory to mount, default current directory
 - `PIBOX_MEMORY` - memory limit, default `2g`
 - `PIBOX_CPUS` - CPU limit, default `2`
@@ -88,7 +96,7 @@ PIBOX_NETWORK=myapp_default PIBOX_POSTGRES_HOST=postgres pibox
 Create a project-specific image when you need extra system packages:
 
 ```dockerfile
-FROM pi-sandbox
+FROM jirauha/pibox
 
 USER root
 RUN apt-get update \

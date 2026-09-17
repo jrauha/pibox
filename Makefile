@@ -1,4 +1,4 @@
-IMAGE ?= pi-sandbox
+IMAGE ?= jirauha/pibox
 SANDBOX_UID ?= $(shell id -u)
 SANDBOX_GID ?= $(shell id -g)
 SANDBOX_USER ?= sandbox
@@ -24,7 +24,7 @@ help:
 	@echo "Examples:"
 	@echo "  make build"
 	@echo "  make run"
-	@echo "  IMAGE=my-pi-sandbox make build"
+	@echo "  IMAGE=my-pibox make build"
 
 build:
 	docker build \
