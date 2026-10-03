@@ -90,6 +90,7 @@ Useful variables:
 - `PIBOX_NETWORK` - Docker network; prompts only in an interactive terminal
 - `PIBOX_NETWORK_PROMPT` - set to `0` to disable the network prompt
 - `PIBOX_TTY` - Docker TTY mode: `auto` default, `1` force, `0` disable
+- `PIBOX_SELINUX_SUFFIX` - bind-mount SELinux label suffix, default `:z` for sharing files between containers
 - `PIBOX_POSTGRES_HOST` - expose as `PGHOST` in the container
 - `PIBOX_EXTRA_ARGS` - extra raw `docker run` arguments
 - `PIBOX_GH_AUTH` - persist sandbox GitHub CLI auth, default `1`; set `0` to disable

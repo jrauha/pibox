@@ -19,7 +19,7 @@ POSTGRES_PORT="${PIBOX_POSTGRES_PORT:-5432}"
 READ_ONLY="${PIBOX_READ_ONLY:-0}"
 DROP_CAPS="${PIBOX_DROP_CAPS:-1}"
 NO_NEW_PRIVS="${PIBOX_NO_NEW_PRIVS:-1}"
-SELINUX_SUFFIX="${PIBOX_SELINUX_SUFFIX:-:Z}"
+SELINUX_SUFFIX="${PIBOX_SELINUX_SUFFIX:-:z}"
 GIT_IDENTITY="${PIBOX_GIT_IDENTITY:-1}"
 GIT_NAME="${PIBOX_GIT_NAME:-$(git config --global --get user.name 2>/dev/null || true)}"
 GIT_EMAIL="${PIBOX_GIT_EMAIL:-$(git config --global --get user.email 2>/dev/null || true)}"
@@ -141,8 +141,6 @@ setup_worktree() {
   # Keep those paths intact rather than relocating the worktree to /workspace.
   WORKSPACE="$WORKTREE_PATH"
   WORKDIR="$WORKTREE_PATH"
-  # Git metadata is shared by concurrent worktree containers on SELinux hosts.
-  if [[ -z "${PIBOX_SELINUX_SUFFIX:-}" ]]; then SELINUX_SUFFIX=:z; fi
 }
 
 enabled() { [[ "${1:-0}" == "1" ]]; }
