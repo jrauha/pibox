@@ -49,6 +49,38 @@ elif (($#)); then
   exit 2
 fi
 
+copy_worktree_includes() {
+  local include_file="$WORKTREE_REPO/.worktreeinclude"
+  local matcher_dir path source destination
+  [[ -f "$include_file" ]] || return 0
+
+  # Use Git's own ignore-pattern matcher against an isolated repo, so patterns
+  # in .worktreeinclude don't get mixed with the project's .gitignore files.
+  matcher_dir="$(mktemp -d)"
+  cp -- "$include_file" "$matcher_dir/.gitignore"
+  git -C "$matcher_dir" init -q
+
+  while IFS= read -r -d '' path; do
+    # Managed worktrees must never be copied into one another.
+    case "$path" in .pibox/worktrees|.pibox/worktrees/*) continue ;; esac
+    if ! git -C "$matcher_dir" -c core.excludesFile=/dev/null check-ignore \
+      --no-index -q -- "$path"; then
+      continue
+    fi
+    source="$WORKTREE_REPO/$path"
+    destination="$WORKTREE_PATH/$path"
+    # Don't overwrite a file tracked in the new worktree's branch.
+    if git -C "$WORKTREE_PATH" ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+      continue
+    fi
+    mkdir -p -- "$(dirname -- "$destination")"
+    cp -a -- "$source" "$destination"
+    printf 'Copied worktree include: %s\n' "$path" >&2
+  done < <(git -C "$WORKTREE_REPO" ls-files --others --ignored --exclude-standard -z)
+
+  rm -rf -- "$matcher_dir"
+}
+
 setup_worktree() {
   local source_dir="$WORKSPACE" exclude path_git_root path_common
   if ! WORKTREE_REPO="$(cd -- "$source_dir" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null)"; then
@@ -101,6 +133,7 @@ setup_worktree() {
       printf '\n/.pibox/worktrees/\n' >>"$exclude"
     fi
     git -C "$WORKTREE_REPO" worktree add -b "$WORKTREE_BRANCH" "$WORKTREE_PATH" HEAD
+    copy_worktree_includes
     printf 'Created worktree %s (branch %s)\n' "$WORKTREE_PATH" "$WORKTREE_BRANCH" >&2
   fi
 
