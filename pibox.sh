@@ -29,7 +29,94 @@ GH_CONFIG_TARGET="${PIBOX_GH_CONFIG_TARGET:-/home/sandbox/.config/gh}"
 INTERACTIVE=0
 [[ -t 0 && -t 1 && -z "${CI:-}" ]] && INTERACTIVE=1
 
+# Syntax: pibox [name] [shell [shell args] | -- [pi args]]
+WORKTREE_MODE=0
+WORKTREE_NAME=""
+SHELL_MODE=0
+case "${1:-}" in
+  ""|shell|--) ;;
+  -*) printf 'Pi arguments must follow -- (e.g. pibox -- %s)\n' "$1" >&2; exit 2 ;;
+  *) WORKTREE_MODE=1; WORKTREE_NAME="$1"; shift ;;
+esac
+
+if [[ "${1:-}" == -- ]]; then
+  shift
+elif [[ "${1:-}" == shell ]]; then
+  SHELL_MODE=1
+  shift
+elif (($#)); then
+  printf 'Pi arguments must follow -- (e.g. pibox %s -- <pi args>)\n' "$WORKTREE_NAME" >&2
+  exit 2
+fi
+
+setup_worktree() {
+  local source_dir="$WORKSPACE" exclude path_git_root path_common
+  if ! WORKTREE_REPO="$(cd -- "$source_dir" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null)"; then
+    printf 'Worktree mode requires PIBOX_WORKSPACE to be inside a Git repository\n' >&2
+    exit 2
+  fi
+  WORKTREE_REPO="$(cd -- "$WORKTREE_REPO" && pwd -P)"
+  if ! git -C "$WORKTREE_REPO" rev-parse --verify HEAD >/dev/null 2>&1; then
+    printf 'Worktree mode requires a repository with at least one commit\n' >&2
+    exit 2
+  fi
+  GIT_COMMON_DIR="$(cd -- "$WORKTREE_REPO" && cd -- "$(git rev-parse --git-common-dir)" && pwd -P)"
+  if [[ "$WORKTREE_REPO" == *:* || "$GIT_COMMON_DIR" == *:* ||
+        "$WORKTREE_REPO" == *$'\n'* || "$GIT_COMMON_DIR" == *$'\n'* ]]; then
+    printf 'Worktree mode does not support colons or newlines in repository paths\n' >&2
+    exit 2
+  fi
+
+  if [[ ! "$WORKTREE_NAME" =~ ^[[:alnum:]][[:alnum:]_.-]*$ ]] ||
+     ! git check-ref-format --branch "pibox/$WORKTREE_NAME" >/dev/null 2>&1; then
+    printf 'Invalid worktree name: %s\n' "$WORKTREE_NAME" >&2
+    exit 2
+  fi
+  WORKTREE_BRANCH="pibox/$WORKTREE_NAME"
+  WORKTREE_DIR="$WORKTREE_REPO/.pibox/worktrees"
+  WORKTREE_PATH="$WORKTREE_DIR/$WORKTREE_NAME"
+  if [[ -L "$WORKTREE_REPO/.pibox" || -L "$WORKTREE_DIR" || -L "$WORKTREE_PATH" ]]; then
+    printf 'Refusing to use a symlinked worktree path: %s\n' "$WORKTREE_PATH" >&2
+    exit 2
+  fi
+
+  if [[ -e "$WORKTREE_PATH" ]]; then
+    path_git_root="$(git -C "$WORKTREE_PATH" rev-parse --show-toplevel 2>/dev/null || true)"
+    path_common="$(git -C "$WORKTREE_PATH" rev-parse --git-common-dir 2>/dev/null || true)"
+    if [[ "$(cd -- "$path_git_root" 2>/dev/null && pwd -P)" != "$WORKTREE_PATH" ]] ||
+       [[ "$(cd -- "$WORKTREE_PATH" && cd -- "$path_common" 2>/dev/null && pwd -P)" != "$GIT_COMMON_DIR" ]] ||
+       ! git -C "$WORKTREE_REPO" worktree list --porcelain | grep -Fx "worktree $WORKTREE_PATH" >/dev/null; then
+      printf 'Path exists but is not a registered worktree of this repository: %s\n' "$WORKTREE_PATH" >&2
+      exit 2
+    fi
+    printf 'Reopening worktree %s\n' "$WORKTREE_PATH" >&2
+  else
+    if git -C "$WORKTREE_REPO" show-ref --verify --quiet "refs/heads/$WORKTREE_BRANCH"; then
+      printf 'Branch already exists without its worktree: %s\n' "$WORKTREE_BRANCH" >&2
+      exit 2
+    fi
+    mkdir -p -- "$WORKTREE_DIR"
+    exclude="$GIT_COMMON_DIR/info/exclude"
+    if [[ ! -f "$exclude" ]] || ! grep -Fxq '/.pibox/worktrees/' "$exclude"; then
+      printf '\n/.pibox/worktrees/\n' >>"$exclude"
+    fi
+    git -C "$WORKTREE_REPO" worktree add -b "$WORKTREE_BRANCH" "$WORKTREE_PATH" HEAD
+    printf 'Created worktree %s (branch %s)\n' "$WORKTREE_PATH" "$WORKTREE_BRANCH" >&2
+  fi
+
+  # Git's .git file and worktree metadata contain host-absolute paths.
+  # Keep those paths intact rather than relocating the worktree to /workspace.
+  WORKSPACE="$WORKTREE_PATH"
+  WORKDIR="$WORKTREE_PATH"
+  # Git metadata is shared by concurrent worktree containers on SELinux hosts.
+  if [[ -z "${PIBOX_SELINUX_SUFFIX:-}" ]]; then SELINUX_SUFFIX=:z; fi
+}
+
 enabled() { [[ "${1:-0}" == "1" ]]; }
+
+if enabled "$WORKTREE_MODE"; then
+  setup_worktree
+fi
 
 select_network() {
   local requested="${PIBOX_NETWORK:-}"
@@ -93,6 +180,10 @@ args=(
   -w "$WORKDIR"
 )
 
+if enabled "$WORKTREE_MODE"; then
+  args+=(-v "${GIT_COMMON_DIR}:${GIT_COMMON_DIR}${SELINUX_SUFFIX}")
+fi
+
 case "${PIBOX_TTY:-auto}" in
   auto) enabled "$INTERACTIVE" && args+=(-it) ;;
   1|true|yes) args+=(-it) ;;
@@ -100,9 +191,8 @@ case "${PIBOX_TTY:-auto}" in
   *) printf 'Invalid PIBOX_TTY=%s (use auto, 1, or 0)\n' "$PIBOX_TTY" >&2; exit 2 ;;
 esac
 
-if [[ "${1:-}" == "shell" ]]; then
+if enabled "$SHELL_MODE"; then
   args+=(--entrypoint bash)
-  shift
 fi
 
 if [[ -n "$POSTGRES_HOST" ]]; then

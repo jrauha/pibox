@@ -37,6 +37,22 @@ Open a shell instead of `pi`:
 ./pibox.sh shell
 ```
 
+## Git worktrees
+
+From a Git repository, pass a name to open Pi in a persistent worktree:
+
+```bash
+./pibox.sh feature-auth
+./pibox.sh feature-auth -- -p 'hello'
+./pibox.sh feature-auth shell
+```
+
+This creates `.pibox/worktrees/feature-auth` on branch `pibox/feature-auth`; running it again reopens the same worktree. Without a name, pibox uses the current workspace. Always put Pi arguments after `--` (for example, `./pibox.sh -- -p 'hello'` without a worktree).
+
+Worktrees are never removed automatically. To remove one, run `git worktree remove .pibox/worktrees/feature-auth` from the repo root; delete its branch separately if needed.
+
+In worktree mode, the container runs at the worktree's host path (not `/workspace`) and mounts shared Git metadata read-write.
+
 Or install it on your `PATH`:
 
 ```bash
@@ -58,7 +74,7 @@ PIBOX_READ_ONLY=1 pibox
 Useful variables:
 
 - `PIBOX_IMAGE` - Docker image, default `jirauha/pibox`
-- `PIBOX_WORKSPACE` - host directory to mount, default current directory
+- `PIBOX_WORKSPACE` - host directory to mount, default current directory; selects the repository in worktree mode
 - `PIBOX_MEMORY` - memory limit, default `2g`
 - `PIBOX_CPUS` - CPU limit, default `2`
 - `PIBOX_NETWORK` - Docker network; prompts only in an interactive terminal

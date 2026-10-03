@@ -41,7 +41,7 @@ rebuild:
 		-t $(IMAGE) .
 
 run:
-	PIBOX_IMAGE=$(IMAGE) ./pibox.sh run
+	PIBOX_IMAGE=$(IMAGE) ./pibox.sh
 
 shell:
 	PIBOX_IMAGE=$(IMAGE) ./pibox.sh shell
