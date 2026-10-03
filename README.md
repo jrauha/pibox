@@ -53,6 +53,16 @@ Worktrees are never removed automatically. To remove one, run `git worktree remo
 
 In worktree mode, the container runs at the worktree's host path (not `/workspace`) and mounts shared Git metadata read-write.
 
+To copy Git-ignored local files into newly created worktrees, add a `.worktreeinclude` file at the repository root. It uses `.gitignore` syntax, but a file is copied only if it both matches a `.worktreeinclude` pattern and is Git-ignored; tracked files are never copied. For example:
+
+```text
+.env
+.env.local
+config/secrets.json
+```
+
+Patterns are relative to the repository root. Matching files are copied from the original working tree when the worktree is first created; reopening it does not overwrite worktree changes.
+
 Or install it on your `PATH`:
 
 ```bash
