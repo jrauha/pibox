@@ -37,31 +37,11 @@ Open a shell instead of `pi`:
 ./pibox.sh shell
 ```
 
-## Git worktrees
-
-From a Git repository, pass a name to open Pi in a persistent worktree:
+Pass Pi arguments directly:
 
 ```bash
-./pibox.sh feature-auth
-./pibox.sh feature-auth -- -p 'hello'
-./pibox.sh feature-auth shell
+./pibox.sh -p 'hello'
 ```
-
-This creates `.pibox/worktrees/feature-auth` on branch `pibox/feature-auth`; running it again reopens the same worktree. Without a name, pibox uses the current workspace. Always put Pi arguments after `--` (for example, `./pibox.sh -- -p 'hello'` without a worktree).
-
-Worktrees are never removed automatically. To remove one, run `git worktree remove .pibox/worktrees/feature-auth` from the repo root; delete its branch separately if needed.
-
-In worktree mode, the container runs at the worktree's host path (not `/workspace`) and mounts shared Git metadata read-write.
-
-To copy Git-ignored local files into newly created worktrees, add a `.worktreeinclude` file at the repository root. It uses `.gitignore` syntax, but a file is copied only if it both matches a `.worktreeinclude` pattern and is Git-ignored; tracked files are never copied. For example:
-
-```text
-.env
-.env.local
-config/secrets.json
-```
-
-Patterns are relative to the repository root. Matching files are copied from the original working tree when the worktree is first created; reopening it does not overwrite worktree changes.
 
 Or install it on your `PATH`:
 
@@ -84,11 +64,10 @@ PIBOX_READ_ONLY=1 pibox
 Useful variables:
 
 - `PIBOX_IMAGE` - Docker image, default `jirauha/pibox`
-- `PIBOX_WORKSPACE` - host directory to mount, default current directory; selects the repository in worktree mode
+- `PIBOX_WORKSPACE` - host directory to mount, default current directory
 - `PIBOX_MEMORY` - memory limit, default `2g`
 - `PIBOX_CPUS` - CPU limit, default `2`
-- `PIBOX_NETWORK` - Docker network; prompts only in an interactive terminal
-- `PIBOX_NETWORK_PROMPT` - set to `0` to disable the network prompt
+- `PIBOX_NETWORK` - Docker network, default `bridge`
 - `PIBOX_TTY` - Docker TTY mode: `auto` default, `1` force, `0` disable
 - `PIBOX_SELINUX_SUFFIX` - bind-mount SELinux label suffix, default `:z` for sharing files between containers
 - `PIBOX_POSTGRES_HOST` - expose as `PGHOST` in the container
