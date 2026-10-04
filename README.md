@@ -51,6 +51,18 @@ ln -sf "$PWD/pibox.sh" ~/.local/bin/pibox
 pibox
 ```
 
+## Git worktrees
+
+For parallel Pi tasks in isolated Git worktrees, use the [Pi Worktree extension](https://github.com/AjayPoshak/pi-worktree-extension). Install it once inside the sandbox:
+
+```bash
+./pibox.sh shell
+pi install npm:pi-worktree-extension
+exit
+```
+
+See the [extension README](https://github.com/AjayPoshak/pi-worktree-extension#readme) for details. Extensions execute with the sandbox's permissions; review third-party code before installing it.
+
 ## Common options
 
 Configure with environment variables:
