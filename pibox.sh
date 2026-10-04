@@ -12,7 +12,7 @@ SANDBOX_GID="${PIBOX_SANDBOX_GID:-$(id -g)}"
 MEMORY="${PIBOX_MEMORY:-2g}"
 CPUS="${PIBOX_CPUS:-2}"
 PIDS_LIMIT="${PIBOX_PIDS_LIMIT:-512}"
-NETWORK_DEFAULT="${PIBOX_NETWORK_DEFAULT:-bridge}"
+NETWORK="${PIBOX_NETWORK:-bridge}"
 POSTGRES_HOST="${PIBOX_POSTGRES_HOST:-}"
 POSTGRES_PORT="${PIBOX_POSTGRES_PORT:-5432}"
 
@@ -29,175 +29,20 @@ GH_CONFIG_TARGET="${PIBOX_GH_CONFIG_TARGET:-/home/sandbox/.config/gh}"
 INTERACTIVE=0
 [[ -t 0 && -t 1 && -z "${CI:-}" ]] && INTERACTIVE=1
 
-# Syntax: pibox [name] [shell [shell args] | -- [pi args]]
-WORKTREE_MODE=0
-WORKTREE_NAME=""
+# Syntax: pibox [shell | pi args]
 SHELL_MODE=0
 case "${1:-}" in
-  ""|shell|--) ;;
-  -*) printf 'Pi arguments must follow -- (e.g. pibox -- %s)\n' "$1" >&2; exit 2 ;;
-  *) WORKTREE_MODE=1; WORKTREE_NAME="$1"; shift ;;
+  shell)
+    SHELL_MODE=1
+    shift
+    ;;
+  --)
+    shift
+    ;;
+  *) ;;
 esac
 
-if [[ "${1:-}" == -- ]]; then
-  shift
-elif [[ "${1:-}" == shell ]]; then
-  SHELL_MODE=1
-  shift
-elif (($#)); then
-  printf 'Pi arguments must follow -- (e.g. pibox %s -- <pi args>)\n' "$WORKTREE_NAME" >&2
-  exit 2
-fi
-
-copy_worktree_includes() {
-  local include_file="$WORKTREE_REPO/.worktreeinclude"
-  local matcher_dir path source destination
-  [[ -f "$include_file" ]] || return 0
-
-  # Use Git's own ignore-pattern matcher against an isolated repo, so patterns
-  # in .worktreeinclude don't get mixed with the project's .gitignore files.
-  matcher_dir="$(mktemp -d)"
-  cp -- "$include_file" "$matcher_dir/.gitignore"
-  git -C "$matcher_dir" init -q
-
-  while IFS= read -r -d '' path; do
-    # Managed worktrees must never be copied into one another.
-    case "$path" in .pibox/worktrees|.pibox/worktrees/*) continue ;; esac
-    if ! git -C "$matcher_dir" -c core.excludesFile=/dev/null check-ignore \
-      --no-index -q -- "$path"; then
-      continue
-    fi
-    source="$WORKTREE_REPO/$path"
-    destination="$WORKTREE_PATH/$path"
-    # Don't overwrite a file tracked in the new worktree's branch.
-    if git -C "$WORKTREE_PATH" ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
-      continue
-    fi
-    mkdir -p -- "$(dirname -- "$destination")"
-    cp -a -- "$source" "$destination"
-    printf 'Copied worktree include: %s\n' "$path" >&2
-  done < <(git -C "$WORKTREE_REPO" ls-files --others --ignored --exclude-standard -z)
-
-  rm -rf -- "$matcher_dir"
-}
-
-setup_worktree() {
-  local source_dir="$WORKSPACE" exclude path_git_root path_common
-  if ! WORKTREE_REPO="$(cd -- "$source_dir" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null)"; then
-    printf 'Worktree mode requires PIBOX_WORKSPACE to be inside a Git repository\n' >&2
-    exit 2
-  fi
-  WORKTREE_REPO="$(cd -- "$WORKTREE_REPO" && pwd -P)"
-  if ! git -C "$WORKTREE_REPO" rev-parse --verify HEAD >/dev/null 2>&1; then
-    printf 'Worktree mode requires a repository with at least one commit\n' >&2
-    exit 2
-  fi
-  GIT_COMMON_DIR="$(cd -- "$WORKTREE_REPO" && cd -- "$(git rev-parse --git-common-dir)" && pwd -P)"
-  if [[ "$WORKTREE_REPO" == *:* || "$GIT_COMMON_DIR" == *:* ||
-        "$WORKTREE_REPO" == *$'\n'* || "$GIT_COMMON_DIR" == *$'\n'* ]]; then
-    printf 'Worktree mode does not support colons or newlines in repository paths\n' >&2
-    exit 2
-  fi
-
-  if [[ ! "$WORKTREE_NAME" =~ ^[[:alnum:]][[:alnum:]_.-]*$ ]] ||
-     ! git check-ref-format --branch "pibox/$WORKTREE_NAME" >/dev/null 2>&1; then
-    printf 'Invalid worktree name: %s\n' "$WORKTREE_NAME" >&2
-    exit 2
-  fi
-  WORKTREE_BRANCH="pibox/$WORKTREE_NAME"
-  WORKTREE_DIR="$WORKTREE_REPO/.pibox/worktrees"
-  WORKTREE_PATH="$WORKTREE_DIR/$WORKTREE_NAME"
-  if [[ -L "$WORKTREE_REPO/.pibox" || -L "$WORKTREE_DIR" || -L "$WORKTREE_PATH" ]]; then
-    printf 'Refusing to use a symlinked worktree path: %s\n' "$WORKTREE_PATH" >&2
-    exit 2
-  fi
-
-  if [[ -e "$WORKTREE_PATH" ]]; then
-    path_git_root="$(git -C "$WORKTREE_PATH" rev-parse --show-toplevel 2>/dev/null || true)"
-    path_common="$(git -C "$WORKTREE_PATH" rev-parse --git-common-dir 2>/dev/null || true)"
-    if [[ "$(cd -- "$path_git_root" 2>/dev/null && pwd -P)" != "$WORKTREE_PATH" ]] ||
-       [[ "$(cd -- "$WORKTREE_PATH" && cd -- "$path_common" 2>/dev/null && pwd -P)" != "$GIT_COMMON_DIR" ]] ||
-       ! git -C "$WORKTREE_REPO" worktree list --porcelain | grep -Fx "worktree $WORKTREE_PATH" >/dev/null; then
-      printf 'Path exists but is not a registered worktree of this repository: %s\n' "$WORKTREE_PATH" >&2
-      exit 2
-    fi
-    printf 'Reopening worktree %s\n' "$WORKTREE_PATH" >&2
-  else
-    if git -C "$WORKTREE_REPO" show-ref --verify --quiet "refs/heads/$WORKTREE_BRANCH"; then
-      printf 'Branch already exists without its worktree: %s\n' "$WORKTREE_BRANCH" >&2
-      exit 2
-    fi
-    mkdir -p -- "$WORKTREE_DIR"
-    exclude="$GIT_COMMON_DIR/info/exclude"
-    if [[ ! -f "$exclude" ]] || ! grep -Fxq '/.pibox/worktrees/' "$exclude"; then
-      printf '\n/.pibox/worktrees/\n' >>"$exclude"
-    fi
-    git -C "$WORKTREE_REPO" worktree add -b "$WORKTREE_BRANCH" "$WORKTREE_PATH" HEAD
-    copy_worktree_includes
-    printf 'Created worktree %s (branch %s)\n' "$WORKTREE_PATH" "$WORKTREE_BRANCH" >&2
-  fi
-
-  # Git's .git file and worktree metadata contain host-absolute paths.
-  # Keep those paths intact rather than relocating the worktree to /workspace.
-  WORKSPACE="$WORKTREE_PATH"
-  WORKDIR="$WORKTREE_PATH"
-}
-
 enabled() { [[ "${1:-0}" == "1" ]]; }
-
-if enabled "$WORKTREE_MODE"; then
-  setup_worktree
-fi
-
-select_network() {
-  local requested="${PIBOX_NETWORK:-}"
-
-  case "$requested" in
-    "") ;;
-    ask) ;;
-    *) printf '%s\n' "$requested"; return ;;
-  esac
-
-  if [[ "$requested" != "ask" ]] && ! enabled "${PIBOX_NETWORK_PROMPT:-1}"; then
-    printf '%s\n' "$NETWORK_DEFAULT"
-    return
-  fi
-
-  if ! enabled "$INTERACTIVE" || [[ ! -r /dev/tty || ! -w /dev/tty ]]; then
-    printf '%s\n' "$NETWORK_DEFAULT"
-    return
-  fi
-
-  local networks=()
-  mapfile -t networks < <(docker network ls --filter driver=bridge --format '{{.Name}}' 2>/dev/null || true)
-
-  if [[ ${#networks[@]} -eq 0 ]]; then
-    printf '%s\n' "$NETWORK_DEFAULT"
-    return
-  fi
-
-  printf 'Docker network:\n' >/dev/tty
-  local i
-  for i in "${!networks[@]}"; do
-    printf '  %d) %s' "$((i + 1))" "${networks[$i]}" >/dev/tty
-    [[ "${networks[$i]}" == "$NETWORK_DEFAULT" ]] && printf ' (default)' >/dev/tty
-    printf '\n' >/dev/tty
-  done
-
-  local choice
-  printf 'Select network [%s]: ' "$NETWORK_DEFAULT" >/dev/tty
-  read -r choice </dev/tty || choice=""
-
-  if [[ -z "$choice" ]]; then
-    printf '%s\n' "$NETWORK_DEFAULT"
-  elif [[ "$choice" =~ ^[0-9]+$ ]] && (( 10#$choice >= 1 && 10#$choice <= ${#networks[@]} )); then
-    printf '%s\n' "${networks[$((10#$choice - 1))]}"
-  else
-    printf '%s\n' "$choice"
-  fi
-}
-
-NETWORK="$(select_network)"
 
 args=(
   --rm
@@ -210,10 +55,6 @@ args=(
   -v "${HOME_VOLUME}:${HOME_TARGET}"
   -w "$WORKDIR"
 )
-
-if enabled "$WORKTREE_MODE"; then
-  args+=(-v "${GIT_COMMON_DIR}:${GIT_COMMON_DIR}${SELINUX_SUFFIX}")
-fi
 
 case "${PIBOX_TTY:-auto}" in
   auto) enabled "$INTERACTIVE" && args+=(-it) ;;
