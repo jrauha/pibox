@@ -5,6 +5,9 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
+  schedule:
+    - cron: '0 6 * * *' # Daily at 06:00 UTC
+  workflow_dispatch:
 
 jobs:
   docker:
@@ -38,6 +41,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          pull: true
+          no-cache: true
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
