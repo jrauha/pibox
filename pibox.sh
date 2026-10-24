@@ -13,6 +13,7 @@ command -v "$ENGINE" >/dev/null 2>&1 || {
 IMAGE="${PIBOX_IMAGE:-docker.io/jirauha/pibox}"
 WORKSPACE="${PIBOX_WORKSPACE:-$PWD}"
 WORKDIR="${PIBOX_WORKDIR:-/workspace}"
+HOME_VOLUME="${PIBOX_HOME_VOLUME:-pi-agent-home}"
 HOME_TARGET="${PIBOX_HOME_TARGET:-/home/sandbox/.pi/agent}"
 # Image user IDs, not host IDs. Override these for custom images.
 SANDBOX_UID="${PIBOX_SANDBOX_UID:-1000}"
@@ -37,13 +38,8 @@ GIT_IDENTITY="${PIBOX_GIT_IDENTITY:-1}"
 GIT_NAME="${PIBOX_GIT_NAME:-$(git config --global --get user.name 2>/dev/null || true)}"
 GIT_EMAIL="${PIBOX_GIT_EMAIL:-$(git config --global --get user.email 2>/dev/null || true)}"
 GH_AUTH="${PIBOX_GH_AUTH:-0}"
+GH_CONFIG_VOLUME="${PIBOX_GH_CONFIG_VOLUME:-pi-gh-config}"
 GH_CONFIG_TARGET="${PIBOX_GH_CONFIG_TARGET:-/home/sandbox/.config/gh}"
-# Canonical paths give each workspace its own persistent config namespace.
-WORKSPACE="$(cd -- "$WORKSPACE" && pwd -P)"
-project_key="$(printf '%s' "$WORKSPACE" | sha256sum)"
-project_key="${project_key%% *}"
-HOME_VOLUME="${PIBOX_HOME_VOLUME:-pibox-${project_key}-agent}"
-GH_CONFIG_VOLUME="${PIBOX_GH_CONFIG_VOLUME:-pibox-${project_key}-gh}"
 
 INTERACTIVE=0
 [[ -t 0 && -t 1 && -z "${CI:-}" ]] && INTERACTIVE=1
@@ -73,7 +69,6 @@ args=(
   -w "$WORKDIR"
 )
 
-# Named volumes persist per project.
 args+=(-v "${HOME_VOLUME}:${HOME_TARGET}")
 
 [[ -n "$MEMORY" ]] && args+=(--memory "$MEMORY")
