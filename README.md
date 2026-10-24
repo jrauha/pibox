@@ -35,7 +35,7 @@ Set environment variables before running:
 | `PIBOX_NETWORK` | `bridge`; use `none` to disable networking |
 | `PIBOX_READ_ONLY` | `0`; set `1` for a read-only container filesystem |
 | `PIBOX_GH_AUTH` | `0`; set `1` to persist GitHub auth |
-| `PIBOX_HOME_VOLUME`, `PIBOX_GH_CONFIG_VOLUME` | `pi-agent-home`, `pi-gh-config` |
+| `PIBOX_HOME_VOLUME`, `PIBOX_GH_CONFIG_VOLUME` | Per-workspace named volumes |
 | `PIBOX_SANDBOX_UID`, `PIBOX_SANDBOX_GID` | Image user IDs, both `1000` |
 | `PIBOX_TTY` | `auto`, `1`, or `0` |
 | `PIBOX_SELINUX_SUFFIX` | `:z` |
@@ -58,15 +58,15 @@ gh auth login
 gh auth setup-git
 ```
 
-Use `PIBOX_GH_AUTH=1` on subsequent runs to reuse auth.
+Use `PIBOX_GH_AUTH=1` on subsequent runs in the same workspace to reuse auth.
 For parallel Git worktrees, see the [Pi Worktree extension](https://github.com/AjayPoshak/pi-worktree-extension).
 
 ## Storage and security
 
-Config persists in shared named volumes. Override their names to avoid sharing
-across projects. Existing volumes with incorrect ownership need manual migration
-or replacement; startup no longer repairs them. Rebuild the image for the new
-directory ownership setup.
+Config persists per canonical workspace path; moving a project selects new volumes.
+Old global volumes aren't reused automatically. Existing volumes with incorrect
+ownership need manual migration or replacement; startup no longer repairs them.
+Rebuild the image for the new directory ownership setup.
 
 The sandbox can write the workspace and access forwarded `ANTHROPIC_API_KEY` and
 any mounted credentials. Persistent config can carry malicious extensions into
