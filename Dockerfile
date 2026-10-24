@@ -30,7 +30,9 @@ RUN apt-get update \
 
 RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 
-RUN mkdir -p "/home/${SANDBOX_USER}/.pi/agent" \
+# Fresh named volumes inherit these directories' ownership.
+RUN mkdir -p "/home/${SANDBOX_USER}/.pi/agent" "/home/${SANDBOX_USER}/.config/gh" \
+  && chmod 700 "/home/${SANDBOX_USER}/.pi/agent" "/home/${SANDBOX_USER}/.config/gh" \
   && chown -R "${SANDBOX_UID}:${SANDBOX_GID}" "/home/${SANDBOX_USER}"
 
 USER ${SANDBOX_UID}:${SANDBOX_GID}
