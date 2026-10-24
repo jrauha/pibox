@@ -1,6 +1,7 @@
-IMAGE ?= jirauha/pibox
-SANDBOX_UID ?= $(shell id -u)
-SANDBOX_GID ?= $(shell id -g)
+PIBOX_ENGINE ?= podman
+IMAGE ?= docker.io/jirauha/pibox
+SANDBOX_UID ?= 1000
+SANDBOX_GID ?= 1000
 SANDBOX_USER ?= sandbox
 
 .PHONY: help build rebuild run shell clean
@@ -16,6 +17,7 @@ help:
 	@echo "  clean    Remove the sandbox image"
 	@echo
 	@echo "Variables:"
+	@echo "  PIBOX_ENGINE=$(PIBOX_ENGINE)"
 	@echo "  IMAGE=$(IMAGE)"
 	@echo "  SANDBOX_UID=$(SANDBOX_UID)"
 	@echo "  SANDBOX_GID=$(SANDBOX_GID)"
@@ -27,24 +29,24 @@ help:
 	@echo "  IMAGE=my-pibox make build"
 
 build:
-	docker build \
+	$(PIBOX_ENGINE) build \
 		--build-arg SANDBOX_UID=$(SANDBOX_UID) \
 		--build-arg SANDBOX_GID=$(SANDBOX_GID) \
 		--build-arg SANDBOX_USER=$(SANDBOX_USER) \
 		-t $(IMAGE) .
 
 rebuild:
-	docker build --no-cache \
+	$(PIBOX_ENGINE) build --no-cache \
 		--build-arg SANDBOX_UID=$(SANDBOX_UID) \
 		--build-arg SANDBOX_GID=$(SANDBOX_GID) \
 		--build-arg SANDBOX_USER=$(SANDBOX_USER) \
 		-t $(IMAGE) .
 
 run:
-	PIBOX_IMAGE=$(IMAGE) ./pibox.sh
+	PIBOX_ENGINE=$(PIBOX_ENGINE) PIBOX_IMAGE=$(IMAGE) PIBOX_SANDBOX_UID=$(SANDBOX_UID) PIBOX_SANDBOX_GID=$(SANDBOX_GID) ./pibox.sh
 
 shell:
-	PIBOX_IMAGE=$(IMAGE) ./pibox.sh shell
+	PIBOX_ENGINE=$(PIBOX_ENGINE) PIBOX_IMAGE=$(IMAGE) PIBOX_SANDBOX_UID=$(SANDBOX_UID) PIBOX_SANDBOX_GID=$(SANDBOX_GID) ./pibox.sh shell
 
 clean:
-	docker image rm $(IMAGE)
+	$(PIBOX_ENGINE) image rm $(IMAGE)

@@ -1,132 +1,75 @@
 # pibox
 
-Simple opinionated dev sandbox for the [Pi agent](https://pi.dev/).
+A development sandbox for the [Pi agent](https://pi.dev/), using rootless Podman by default.
+Includes Node.js, Python, Go, Rust, Git, GitHub CLI, PostgreSQL clients, and build tools.
 
-Included tools:
-
-- Node.js/npm and `pi`
-- Python 3, pip, and venv
-- Go
-- Rust, Cargo, and rustfmt
-- Git, GitHub CLI, ripgrep, fd
-- PostgreSQL client tools and common build tools
-
-## Image
-
-The default image is published at [`jirauha/pibox`](https://hub.docker.com/r/jirauha/pibox).
+## Usage
 
 ```bash
-docker pull jirauha/pibox
+./pibox.sh                     # Start Pi
+./pibox.sh shell               # Open Bash
+./pibox.sh -p 'hello'          # Pass Pi arguments
+make build                    # Build locally
 ```
 
-## Build locally
+The default image is [`docker.io/jirauha/pibox`](https://hub.docker.com/r/jirauha/pibox).
+Set `PIBOX_ENGINE=docker` for Docker; use the same engine for builds and runs.
 
-```bash
-make build
-```
-
-## Run
-
-```bash
-./pibox.sh
-```
-
-Open a shell instead of `pi`:
-
-```bash
-./pibox.sh shell
-```
-
-Pass Pi arguments directly:
-
-```bash
-./pibox.sh -p 'hello'
-```
-
-Or install it on your `PATH`:
+Optional PATH installation:
 
 ```bash
 mkdir -p ~/.local/bin
 ln -sf "$PWD/pibox.sh" ~/.local/bin/pibox
-pibox
 ```
 
-## Git worktrees
+## Configuration
 
-For parallel Pi tasks in isolated Git worktrees, use the [Pi Worktree extension](https://github.com/AjayPoshak/pi-worktree-extension). Install it once inside the sandbox:
+Set environment variables before running:
 
-```bash
-./pibox.sh shell
-pi install npm:pi-worktree-extension
-exit
-```
+| Variable | Default / purpose |
+| --- | --- |
+| `PIBOX_ENGINE` | `podman` or `docker` |
+| `PIBOX_IMAGE` | `docker.io/jirauha/pibox` |
+| `PIBOX_WORKSPACE` | Current directory |
+| `PIBOX_MEMORY`, `PIBOX_CPUS` | Unset; opt-in resource limits |
+| `PIBOX_NETWORK` | `bridge`; use `none` to disable networking |
+| `PIBOX_READ_ONLY` | `0`; set `1` for a read-only container filesystem |
+| `PIBOX_GH_AUTH` | `0`; set `1` to persist GitHub auth |
+| `PIBOX_HOME_VOLUME`, `PIBOX_GH_CONFIG_VOLUME` | `pi-agent-home`, `pi-gh-config` |
+| `PIBOX_SANDBOX_UID`, `PIBOX_SANDBOX_GID` | Image user IDs, both `1000` |
+| `PIBOX_TTY` | `auto`, `1`, or `0` |
+| `PIBOX_SELINUX_SUFFIX` | `:z` |
+| `PIBOX_POSTGRES_HOST` | Forwarded as `PGHOST`; port defaults to `5432` |
+| `PIBOX_EXTRA_ARGS` | Extra run flags; whitespace-separated, without shell quoting |
 
-See the [extension README](https://github.com/AjayPoshak/pi-worktree-extension#readme) for details. Extensions execute with the sandbox's permissions; review third-party code before installing it.
+CPU/memory limits require suitable cgroup support on rootless hosts. Without
+explicit limits, the sandbox can exhaust host resources.
 
-## Common options
+For custom images, prepare writable `.pi/agent` and `.config/gh` directories for
+the image user. Podman maps the host user with `keep-id`. For local Docker builds,
+use `make build SANDBOX_UID=$(id -u) SANDBOX_GID=$(id -g)` and pass the same IDs at runtime.
 
-Configure with environment variables:
-
-```bash
-PIBOX_MEMORY=4g PIBOX_CPUS=4 pibox
-PIBOX_NETWORK=none pibox
-PIBOX_READ_ONLY=1 pibox
-```
-
-Useful variables:
-
-- `PIBOX_IMAGE` - Docker image, default `jirauha/pibox`
-- `PIBOX_WORKSPACE` - host directory to mount, default current directory
-- `PIBOX_MEMORY` - memory limit, default `2g`
-- `PIBOX_CPUS` - CPU limit, default `2`
-- `PIBOX_NETWORK` - Docker network, default `bridge`
-- `PIBOX_TTY` - Docker TTY mode: `auto` default, `1` force, `0` disable
-- `PIBOX_SELINUX_SUFFIX` - bind-mount SELinux label suffix, default `:z` for sharing files between containers
-- `PIBOX_POSTGRES_HOST` - expose as `PGHOST` in the container
-- `PIBOX_EXTRA_ARGS` - extra raw `docker run` arguments
-- `PIBOX_GH_AUTH` - persist sandbox GitHub CLI auth, default `1`; set `0` to disable
-
-## GitHub auth for pushing
-
-First authenticate inside the sandbox:
+## GitHub auth
 
 ```bash
-pibox shell
-```
-
-Then run:
-
-```bash
+PIBOX_GH_AUTH=1 ./pibox.sh shell
+# Inside the sandbox:
 gh auth login
 gh auth setup-git
 ```
 
-Future runs can reuse the sandbox auth volume. Set `PIBOX_GH_AUTH=0` to disable this mount.
+Use `PIBOX_GH_AUTH=1` on subsequent runs to reuse auth.
+For parallel Git worktrees, see the [Pi Worktree extension](https://github.com/AjayPoshak/pi-worktree-extension).
 
-## PostgreSQL example
+## Storage and security
 
-```bash
-PIBOX_NETWORK=myapp_default PIBOX_POSTGRES_HOST=postgres pibox
-```
+Config persists in shared named volumes. Override their names to avoid sharing
+across projects. Existing volumes with incorrect ownership need manual migration
+or replacement; startup no longer repairs them. Rebuild the image for the new
+directory ownership setup.
 
-## Extend the image
-
-Create a project-specific image when you need extra system packages:
-
-```dockerfile
-FROM jirauha/pibox
-
-USER root
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends php composer \
-  && rm -rf /var/lib/apt/lists/*
-
-USER 1000:1000
-```
-
-Build and use it:
-
-```bash
-docker build -t my-pibox .
-PIBOX_IMAGE=my-pibox pibox
-```
+The sandbox can write the workspace and access forwarded `ANTHROPIC_API_KEY` and
+any mounted credentials. Persistent config can carry malicious extensions into
+future sessions. Don't share writable config across untrusted projects or mount
+host home directories or engine sockets. For untrusted code, use a separate checkout,
+omit credentials, and consider `PIBOX_NETWORK=none`.

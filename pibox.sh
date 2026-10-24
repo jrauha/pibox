@@ -1,16 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="${PIBOX_IMAGE:-jirauha/pibox}"
+ENGINE="${PIBOX_ENGINE:-podman}"
+case "$ENGINE" in
+  docker|podman) ;;
+  *) printf 'Invalid PIBOX_ENGINE=%s (use docker or podman)\n' "$ENGINE" >&2; exit 2 ;;
+esac
+command -v "$ENGINE" >/dev/null 2>&1 || {
+  printf 'Container engine not found: %s\n' "$ENGINE" >&2; exit 127
+}
+
+IMAGE="${PIBOX_IMAGE:-docker.io/jirauha/pibox}"
 WORKSPACE="${PIBOX_WORKSPACE:-$PWD}"
 WORKDIR="${PIBOX_WORKDIR:-/workspace}"
 HOME_VOLUME="${PIBOX_HOME_VOLUME:-pi-agent-home}"
 HOME_TARGET="${PIBOX_HOME_TARGET:-/home/sandbox/.pi/agent}"
-SANDBOX_UID="${PIBOX_SANDBOX_UID:-$(id -u)}"
-SANDBOX_GID="${PIBOX_SANDBOX_GID:-$(id -g)}"
+# Image user IDs, not host IDs. Override these for custom images.
+SANDBOX_UID="${PIBOX_SANDBOX_UID:-1000}"
+SANDBOX_GID="${PIBOX_SANDBOX_GID:-1000}"
+[[ "$SANDBOX_UID" =~ ^[0-9]+$ && "$SANDBOX_GID" =~ ^[0-9]+$ ]] || {
+  printf 'Sandbox UID and GID must be numeric\n' >&2; exit 2
+}
 
-MEMORY="${PIBOX_MEMORY:-2g}"
-CPUS="${PIBOX_CPUS:-2}"
+# Opt-in: some rootless hosts do not delegate memory/CPU controllers.
+MEMORY="${PIBOX_MEMORY:-}"
+CPUS="${PIBOX_CPUS:-}"
 PIDS_LIMIT="${PIBOX_PIDS_LIMIT:-512}"
 NETWORK="${PIBOX_NETWORK:-bridge}"
 POSTGRES_HOST="${PIBOX_POSTGRES_HOST:-}"
@@ -23,9 +37,10 @@ SELINUX_SUFFIX="${PIBOX_SELINUX_SUFFIX:-:z}"
 GIT_IDENTITY="${PIBOX_GIT_IDENTITY:-1}"
 GIT_NAME="${PIBOX_GIT_NAME:-$(git config --global --get user.name 2>/dev/null || true)}"
 GIT_EMAIL="${PIBOX_GIT_EMAIL:-$(git config --global --get user.email 2>/dev/null || true)}"
-GH_AUTH="${PIBOX_GH_AUTH:-1}"
+GH_AUTH="${PIBOX_GH_AUTH:-0}"
 GH_CONFIG_VOLUME="${PIBOX_GH_CONFIG_VOLUME:-pi-gh-config}"
 GH_CONFIG_TARGET="${PIBOX_GH_CONFIG_TARGET:-/home/sandbox/.config/gh}"
+
 INTERACTIVE=0
 [[ -t 0 && -t 1 && -z "${CI:-}" ]] && INTERACTIVE=1
 
@@ -46,15 +61,23 @@ enabled() { [[ "${1:-0}" == "1" ]]; }
 
 args=(
   --rm
-  --memory "$MEMORY"
-  --cpus "$CPUS"
   --pids-limit "$PIDS_LIMIT"
   --network "$NETWORK"
+  --user "${SANDBOX_UID}:${SANDBOX_GID}"
   -e ANTHROPIC_API_KEY
   -v "${WORKSPACE}:${WORKDIR}${SELINUX_SUFFIX}"
-  -v "${HOME_VOLUME}:${HOME_TARGET}"
   -w "$WORKDIR"
 )
+
+args+=(-v "${HOME_VOLUME}:${HOME_TARGET}")
+
+[[ -n "$MEMORY" ]] && args+=(--memory "$MEMORY")
+[[ -n "$CPUS" ]] && args+=(--cpus "$CPUS")
+
+# Keep host workspace ownership intact while mapping to the image user.
+if [[ "$ENGINE" == podman ]]; then
+  args+=(--userns "keep-id:uid=${SANDBOX_UID},gid=${SANDBOX_GID}")
+fi
 
 case "${PIBOX_TTY:-auto}" in
   auto) enabled "$INTERACTIVE" && args+=(-it) ;;
@@ -89,7 +112,7 @@ enabled "$DROP_CAPS" && args+=(--cap-drop=ALL)
 enabled "$NO_NEW_PRIVS" && args+=(--security-opt no-new-privileges)
 enabled "$READ_ONLY" && args+=(--read-only --tmpfs /tmp --tmpfs /home/sandbox/.cache)
 
-# Extra raw docker-run args, e.g.:
+# Extra raw container-run args, e.g.:
 #   PIBOX_EXTRA_ARGS='--env OPENAI_API_KEY'
 if [[ -n "${PIBOX_EXTRA_ARGS:-}" ]]; then
   # Intentionally split like a shell for simple flag lists.
@@ -98,26 +121,4 @@ if [[ -n "${PIBOX_EXTRA_ARGS:-}" ]]; then
   args+=("${extra_args[@]}")
 fi
 
-# Docker named volumes are created as root-owned. Pi writes lock directories
-# beside settings/auth files at startup, so make the mounted config directory
-# writable by the non-root sandbox user before launching Pi.
-if enabled "${PIBOX_INIT_HOME_VOLUME:-1}"; then
-  docker volume create "$HOME_VOLUME" >/dev/null
-  init_volumes=(-v "${HOME_VOLUME}:${HOME_TARGET}")
-  init_cmd="mkdir -p '$HOME_TARGET' && chown -R '$SANDBOX_UID:$SANDBOX_GID' '$HOME_TARGET'"
-
-  if enabled "$GH_AUTH"; then
-    docker volume create "$GH_CONFIG_VOLUME" >/dev/null
-    init_volumes+=(-v "${GH_CONFIG_VOLUME}:${GH_CONFIG_TARGET}")
-    init_cmd="$init_cmd && mkdir -p '$GH_CONFIG_TARGET' && chown -R '$SANDBOX_UID:$SANDBOX_GID' '$GH_CONFIG_TARGET'"
-  fi
-
-  docker run --rm \
-    --entrypoint sh \
-    -u 0 \
-    "${init_volumes[@]}" \
-    "$IMAGE" \
-    -c "$init_cmd"
-fi
-
-docker run "${args[@]}" "$IMAGE" "$@"
+exec "$ENGINE" run "${args[@]}" "$IMAGE" "$@"
