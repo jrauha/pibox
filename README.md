@@ -180,18 +180,6 @@ volume. Leave it unset for tasks that do not need credentials.
 PIBOX_NETWORK=myapp_default PIBOX_POSTGRES_HOST=postgres pibox
 ```
 
-## Tests
-
-```bash
-bash tests/pibox.sh                     # Mocked Docker/Podman argument tests
-bash tests/container-integration.sh podman # Builds an image; requires rootless Podman
-bash tests/container-integration.sh docker # Requires Docker and host UID/GID 1000
-```
-
-For Docker on other host IDs, set `PIBOX_SANDBOX_UID=$(id -u)` and
-`PIBOX_SANDBOX_GID=$(id -g)` when running the integration test.
-The integration script also supports custom image UID/GID settings with rootless Podman.
-
 ## Extend the image
 
 Create a project-specific image when you need extra system packages:
