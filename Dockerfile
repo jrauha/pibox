@@ -17,6 +17,7 @@ RUN apt-get update \
     git \
     golang-go \
     libpq-dev \
+    nano \
     pkg-config \
     postgresql-client \
     python3 \
@@ -25,6 +26,7 @@ RUN apt-get update \
     ripgrep \
     rustc \
     rustfmt \
+    vim \
   && ln -s /usr/bin/fdfind /usr/local/bin/fd \
   && rm -rf /var/lib/apt/lists/*
 
