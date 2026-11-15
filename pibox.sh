@@ -27,8 +27,6 @@ MEMORY="${PIBOX_MEMORY:-}"
 CPUS="${PIBOX_CPUS:-}"
 PIDS_LIMIT="${PIBOX_PIDS_LIMIT:-512}"
 NETWORK="${PIBOX_NETWORK:-bridge}"
-POSTGRES_HOST="${PIBOX_POSTGRES_HOST:-}"
-POSTGRES_PORT="${PIBOX_POSTGRES_PORT:-5432}"
 
 READ_ONLY="${PIBOX_READ_ONLY:-0}"
 DROP_CAPS="${PIBOX_DROP_CAPS:-1}"
@@ -64,7 +62,6 @@ args=(
   --pids-limit "$PIDS_LIMIT"
   --network "$NETWORK"
   --user "${SANDBOX_UID}:${SANDBOX_GID}"
-  -e ANTHROPIC_API_KEY
   -v "${WORKSPACE}:${WORKDIR}${SELINUX_SUFFIX}"
   -w "$WORKDIR"
 )
@@ -90,10 +87,6 @@ if enabled "$SHELL_MODE"; then
   args+=(--entrypoint bash)
 fi
 
-if [[ -n "$POSTGRES_HOST" ]]; then
-  args+=(-e "PGHOST=${POSTGRES_HOST}" -e "PGPORT=${POSTGRES_PORT}")
-fi
-
 if enabled "$GIT_IDENTITY" && [[ -n "$GIT_NAME" && -n "$GIT_EMAIL" ]]; then
   args+=(
     -e GIT_CONFIG_COUNT=2
@@ -112,8 +105,7 @@ enabled "$DROP_CAPS" && args+=(--cap-drop=ALL)
 enabled "$NO_NEW_PRIVS" && args+=(--security-opt no-new-privileges)
 enabled "$READ_ONLY" && args+=(--read-only --tmpfs /tmp --tmpfs /home/sandbox/.cache)
 
-# Extra raw container-run args, e.g.:
-#   PIBOX_EXTRA_ARGS='--env OPENAI_API_KEY'
+# Extra raw container-run args.
 if [[ -n "${PIBOX_EXTRA_ARGS:-}" ]]; then
   # Intentionally split like a shell for simple flag lists.
   # shellcheck disable=SC2206

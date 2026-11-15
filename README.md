@@ -39,7 +39,6 @@ Set environment variables before running:
 | `PIBOX_SANDBOX_UID`, `PIBOX_SANDBOX_GID` | Image user IDs, both `1000` |
 | `PIBOX_TTY` | `auto`, `1`, or `0` |
 | `PIBOX_SELINUX_SUFFIX` | `:z` |
-| `PIBOX_POSTGRES_HOST` | Forwarded as `PGHOST`; port defaults to `5432` |
 | `PIBOX_EXTRA_ARGS` | Extra run flags; whitespace-separated, without shell quoting |
 
 CPU/memory limits require suitable cgroup support on rootless hosts. Without
@@ -68,8 +67,8 @@ across projects. Existing volumes with incorrect ownership need manual migration
 or replacement; startup no longer repairs them. Rebuild the image for the new
 directory ownership setup.
 
-The sandbox can write the workspace and access forwarded `ANTHROPIC_API_KEY` and
-any mounted credentials. Persistent config can carry malicious extensions into
-future sessions. Don't share writable config across untrusted projects or mount
-host home directories or engine sockets. For untrusted code, use a separate checkout,
-omit credentials, and consider `PIBOX_NETWORK=none`.
+The sandbox can write the workspace and access saved agent credentials and any
+mounted credentials. Persistent config can carry malicious extensions into future
+sessions. Don't share writable config across untrusted projects or mount host home
+directories or engine sockets. For untrusted code, use a separate checkout, omit
+credentials, and consider `PIBOX_NETWORK=none`.
